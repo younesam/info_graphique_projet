@@ -172,17 +172,19 @@ Vector getColor(const Ray& ray, const Scene& scene, int ray_depth, const Vector&
 		}
 		else if (transparent == true) {
 			// handle transparent surfaces
+			double ni = 1.0, nt = 1.5;
 			double cosi = -dot(N, ray.u);
 			if (cosi < 0) {
+				std::swap(ni, nt);
 				cosi = -cosi;
-				N = N - 2 * N;
+				N = 2 * N - N;
 			}
-			double eta = 1.5;
-			double k = 1 - eta * eta * (1 - cosi * cosi);
+			double eta = ni / nt;
+			double k = 1 - sqr(eta) * (1 - sqr(cosi));
 			if (k >= 0) {
 				Vector omega_refracted = eta * ray.u + (eta * cosi - sqrt(k)) * N;
 				omega_refracted.normalize();
-				Ray refracted_ray(P_eps, omega_refracted);
+				Ray refracted_ray(P - epsilon * N, omega_refracted);
 				luminosite_couleur = getColor(refracted_ray, scene, ray_depth - 1, S);
 			}
 		}
@@ -191,7 +193,7 @@ Vector getColor(const Ray& ray, const Scene& scene, int ray_depth, const Vector&
 			Vector omega = S - P;
 			omega.normalize();
 			double d = sqrt((S - P).norm2());
-			double intensite = 50000000;
+			double intensite = 10000000000;
 			Ray v(P_eps, omega);
 			Sphere source_lumiere(S, Vector(1, 1, 1), d, false);
 			double paramv;
@@ -215,40 +217,51 @@ Vector getColor(const Ray& ray, const Scene& scene, int ray_depth, const Vector&
 
 
 int main() {
-	int W = 512;
-	int H = 512;
+	int W = 1024;
+	int H = 1024;
 	double fovAlpha = 60 * M_PI / 180;
 	double fov = 2 * tan(fovAlpha / 2);
 
-	Vector C(0, 0, -55);
+	Vector C(15, 0, -55);
 	Vector O(0, 0, 0);
 	double R = 10;
 	Vector alb(0.5, 1, 0);
 	Sphere s(C, alb, R, true);
 
+	Sphere s2(Vector(-15, 0, -55), alb, R, false, true);
+
 	// Source de lumière S
-	Vector Source(-10, 20, 40);
+	Vector Source(-10, 20, -15);
 
 	// Scène
 	Scene scene;
 
 	// create a red sphere centered at (0, 1000, 0) with radius 940
-	Sphere red_sphere(Vector(0, 1000, 0), Vector(1, 0, 0), 940, false);
+	Sphere red_sphere(Vector(0, 1000 + 50, 0), Vector(1, 0, 0), 1000, false);
 	scene.spheres.push_back(red_sphere);
 
 	// create a green sphere centered at (0, 0, 1000) with radius 940
-	Sphere green_sphere(Vector(0, 0, 1000), Vector(0, 1, 0), 940, false);
+	Sphere green_sphere(Vector(0, 0, -1000 - 50), Vector(0, 1, 0), 1000, false);
 	scene.spheres.push_back(green_sphere);
 
 	// create a blue sphere centered at (0, -1000, 0) with radius 990
-	Sphere blue_sphere(Vector(0, -1000, 0), Vector(0, 0, 1), 990, false);
+	Sphere blue_sphere(Vector(0, -1000 - 10, 0), Vector(0, 0, 1), 1000, false);
 	scene.spheres.push_back(blue_sphere);
 
 	// create a yellow sphere centered at (0, 0, -1000) with radius 940
-	Sphere yellow_sphere(Vector(0, 0, -1000), Vector(1, 1, 0), 940, false);
+	Sphere yellow_sphere(Vector(0, 0, 1000 + 50), Vector(1, 1, 0), 1000, false);
 	scene.spheres.push_back(yellow_sphere);
 
+	// create a pink  sphere centered at (1000, 0, 0) with radius 940
+	Sphere pink_sphere(Vector(1000 + 25, 0, 0), Vector(1, 0, 1), 1000, false);
+	scene.spheres.push_back(pink_sphere);
+
+	// create a purple  sphere centered at (-1000, 0, 0) with radius 940
+	Sphere purple_sphere(Vector(-1000 - 25, 0, 0), Vector(0.5, 0, 1), 1000, false);
+	scene.spheres.push_back(purple_sphere);
+
 	scene.spheres.push_back(s);
+	scene.spheres.push_back(s2);
 
 	std::vector<unsigned char> image(W * H * 3, 0);
 #pragma omp parallel for
@@ -268,11 +281,11 @@ int main() {
 			// Correction Gamma
 			double gamma = 2.2;
 
-			Vector lumiere_couleur = getColor(r, scene, 3, Source);
+			Vector lumiere_couleur = getColor(r, scene, 100, Source);
 
-			image[(i * W + j) * 3 + 0] = min(lumiere_couleur[0], 255.);   // RED
-			image[(i * W + j) * 3 + 1] = min(lumiere_couleur[1], 255.);  // GREEN
-			image[(i * W + j) * 3 + 2] = min(lumiere_couleur[2], 255.);  // BLUE
+			image[(i * W + j) * 3 + 0] = min(std::pow(lumiere_couleur[0], 1 / gamma), 255.);   // RED
+			image[(i * W + j) * 3 + 1] = min(std::pow(lumiere_couleur[1], 1 / gamma), 255.);  // GREEN
+			image[(i * W + j) * 3 + 2] = min(std::pow(lumiere_couleur[2], 1 / gamma), 255.);  // BLUE
 		}
 	}
 	stbi_write_png("image.png", W, H, 3, &image[0], 0);
