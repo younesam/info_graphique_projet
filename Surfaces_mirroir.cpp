@@ -78,12 +78,12 @@ public:
 
 class Sphere {
 public:
-	Sphere(const Vector& C, const Vector& albedo, double R, bool mirror) : C(C), albedo(albedo), R(R), mirror(mirror) {};
+	Sphere(const Vector& C, const Vector& albedo, double R, bool mirror = false, bool transparent = false) : C(C), albedo(albedo), R(R), mirror(mirror), transparent(transparent) {};
 	Vector C;
 	Vector albedo;
 	double R{};
 	bool mirror;
-	//bool transparent;
+	bool transparent;
 
 };
 
@@ -126,7 +126,7 @@ public:
 
 	Scene() {}
 
-	bool first_intersection(const Ray& r, double& first_param, Vector& first_center, Vector& first_albedo, double& first_r, bool& miroir) {
+	bool first_intersection(const Ray& r, double& first_param, Vector& first_center, Vector& first_albedo, double& first_r, bool& miroir, bool& transparence) const {
 		//first_param = std::numeric_limits<double>::infinity();
 		bool intersect_exists = false;
 		for (const auto& sphere : spheres) {
@@ -139,60 +139,78 @@ public:
 					first_albedo = sphere.albedo;
 					first_r = sphere.R;
 					miroir = sphere.mirror;
+					transparence = sphere.transparent;
 				}
 				intersect_exists = true;
 			}
 		}
 		return intersect_exists;
 	};
+};
 
-	Vector getColor(const Ray& ray, int ray_depth, const Vector& S) {
-		if (ray_depth < 0) return Vector(0., 0., 0.);  // terminates recursion at some point
-		double t = 0;
-		Vector luminosite_couleur(0., 0., 0.);
-		Vector center, albedo;
-		double rayon;
-		bool miroir;
-		double epsilon = 0.0001;
-		bool intersection = first_intersection(ray, t, center, albedo, rayon, miroir);
-		if (intersection) {
-			Vector P = ray.O + ray.u * t;
-			Vector N = P - center;
-			Vector P_eps = P + epsilon * N;
-			N.normalize();
-			if (miroir == true) {
-				Vector omega_reflected = ray.u - 2 * dot(ray.u, N) * N;
-				omega_reflected.normalize();
-
-				Ray reflected_ray(P_eps, omega_reflected);
-				luminosite_couleur = getColor(reflected_ray, ray_depth - 1, S);
+Vector getColor(const Ray& ray, const Scene& scene, int ray_depth, const Vector& S) {
+	if (ray_depth < 0) return Vector(0., 0., 0.);  // terminates recursion at some point
+	double t = 100000000000;
+	Vector luminosite_couleur(0., 0., 0.);
+	Vector center, albedo;
+	double rayon;
+	bool miroir;
+	bool transparent;
+	double epsilon = 0.0001;
+	bool intersection = scene.first_intersection(ray, t, center, albedo, rayon, miroir, transparent);
+	if (intersection) {
+		Vector P = ray.O + ray.u * t;
+		Vector N = P - center;
+		Vector P_eps = P + epsilon * N;
+		N.normalize();
+		if (miroir == true) {
+			// handle mirror surfaces
+			Vector omega_reflected = ray.u - 2 * dot(ray.u, N) * N;
+			omega_reflected.normalize();
+			Ray reflected_ray(P_eps, omega_reflected);
+			luminosite_couleur = getColor(reflected_ray, scene, ray_depth - 1, S);
+		}
+		else if (transparent == true) {
+			// handle transparent surfaces
+			double cosi = -dot(N, ray.u);
+			if (cosi < 0) {
+				cosi = -cosi;
+				N = N - 2 * N;
 			}
-			else {
-				// handle diffuse surfaces
-				Vector omega = S - P;
-				omega.normalize();
-				double d = sqrt((S - P).norm2());
-				double intensite = 50000000;
-				Ray v(P_eps, omega);
-
-				Sphere source_lumiere(S, Vector(1, 1, 1), d, false);
-
-				double paramv;
-				bool intersect_visibilite = intersect(source_lumiere, v, paramv);
-				double visibilite;
-				if (!intersect_visibilite || paramv > d) {
-					visibilite = 1;
-				}
-				else {
-					visibilite = 0;
-				};
-				double lumiere = intensite * max(dot(N, omega), 0.) / (4 * sqr(M_PI * d));
-				Vector lumiere_couleur = albedo * lumiere;
+			double eta = 1.5;
+			double k = 1 - eta * eta * (1 - cosi * cosi);
+			if (k >= 0) {
+				Vector omega_refracted = eta * ray.u + (eta * cosi - sqrt(k)) * N;
+				omega_refracted.normalize();
+				Ray refracted_ray(P_eps, omega_refracted);
+				luminosite_couleur = getColor(refracted_ray, scene, ray_depth - 1, S);
 			}
 		}
-		return luminosite_couleur;
-	};
+		else {
+			// handle diffuse surfaces
+			Vector omega = S - P;
+			omega.normalize();
+			double d = sqrt((S - P).norm2());
+			double intensite = 50000000;
+			Ray v(P_eps, omega);
+			Sphere source_lumiere(S, Vector(1, 1, 1), d, false);
+			double paramv;
+			bool intersect_visibilite = intersect(source_lumiere, v, paramv);
+			double visibilite;
+			if (!intersect_visibilite || paramv > d) {
+				visibilite = 1;
+			}
+			else {
+				visibilite = 0;
+			}
+			double lumiere = intensite * max(dot(N, omega), 0.) / (4 * sqr(M_PI * d));
+			Vector lumiere_couleur = albedo * lumiere;
+			luminosite_couleur = visibilite * lumiere_couleur;
+		}
+	}
+	return luminosite_couleur;
 };
+
 
 
 
@@ -206,7 +224,7 @@ int main() {
 	Vector O(0, 0, 0);
 	double R = 10;
 	Vector alb(0.5, 1, 0);
-	Sphere s(C, alb, R, false);
+	Sphere s(C, alb, R, true);
 
 	// Source de lumière S
 	Vector Source(-10, 20, 40);
@@ -250,7 +268,7 @@ int main() {
 			// Correction Gamma
 			double gamma = 2.2;
 
-			Vector lumiere_couleur = scene.getColor(r, 5, Source);
+			Vector lumiere_couleur = getColor(r, scene, 3, Source);
 
 			image[(i * W + j) * 3 + 0] = min(lumiere_couleur[0], 255.);   // RED
 			image[(i * W + j) * 3 + 1] = min(lumiere_couleur[1], 255.);  // GREEN
