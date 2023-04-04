@@ -78,11 +78,12 @@ public:
 
 class Sphere {
 public:
-	Sphere(const Vector& C, const Vector& albedo, double R, bool Mirror) : C(C), albedo(albedo), R(R), mirror(Mirror) {};
+	Sphere(const Vector& C, const Vector& albedo, double R, bool mirror) : C(C), albedo(albedo), R(R), mirror(mirror) {};
 	Vector C;
 	Vector albedo;
 	double R{};
 	bool mirror;
+	//bool transparent;
 
 };
 
@@ -90,7 +91,7 @@ public:
 // Booléen permettant de déterminer si il y a intersection entre une sphère et un rayon
 // et stocke le paramètre t dans param
 bool intersect(const Sphere& s, const Ray& r, double& param) {
-	param = std::numeric_limits<double>::infinity();
+	//param = std::numeric_limits<double>::infinity();
 	// equation at² + bt + c = 0
 	double a = 1;
 	Vector Inter = r.O - s.C;
@@ -126,7 +127,7 @@ public:
 	Scene() {}
 
 	bool first_intersection(const Ray& r, double& first_param, Vector& first_center, Vector& first_albedo, double& first_r, bool& miroir) {
-		first_param = std::numeric_limits<double>::infinity();
+		//first_param = std::numeric_limits<double>::infinity();
 		bool intersect_exists = false;
 		for (const auto& sphere : spheres) {
 			double t;
@@ -140,7 +141,6 @@ public:
 					miroir = sphere.mirror;
 				}
 				intersect_exists = true;
-				return intersect_exists;
 			}
 		}
 		return intersect_exists;
@@ -148,7 +148,7 @@ public:
 
 	Vector getColor(const Ray& ray, int ray_depth, const Vector& S) {
 		if (ray_depth < 0) return Vector(0., 0., 0.);  // terminates recursion at some point
-		double t;
+		double t = 0;
 		Vector luminosite_couleur(0., 0., 0.);
 		Vector center, albedo;
 		double rayon;
@@ -188,7 +188,7 @@ public:
 				};
 				double lumiere = intensite * max(dot(N, omega), 0.) / (4 * sqr(M_PI * d));
 				Vector lumiere_couleur = albedo * lumiere;
-			}	
+			}
 		}
 		return luminosite_couleur;
 	};
@@ -244,7 +244,7 @@ int main() {
 			//double t;
 			//bool intersection = intersect(s, r, t);
 
-			
+
 			//printf(intersection);
 
 			// Correction Gamma
@@ -261,7 +261,3 @@ int main() {
 
 	return 0;
 }
-
-
-
-
